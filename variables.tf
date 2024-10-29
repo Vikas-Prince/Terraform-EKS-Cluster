@@ -20,6 +20,15 @@ variable "subnet3_cidr" {
   type        = string
 }
 
+variable "instance_type" {
+  description = "The EC2 instance type for the EKS nodes"
+  type        = string
+}
+
+variable "key_name" {
+  description = "The name of the key pair to use for SSH access"
+  type        = string
+}
 
 
 
