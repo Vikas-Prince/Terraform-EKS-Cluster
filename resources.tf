@@ -85,3 +85,76 @@ resource "aws_route_table_association" "route_table_association_3" {
   subnet_id      = aws_subnet.vpcSubnet3.id
   route_table_id = aws_route_table.vpcRouteTable.id
 }
+
+# Create a Security Group for the EKS cluster to control inbound and outbound traffic
+resource "aws_security_group" "terraSecuritygp" {
+  name        = "EKSSecurityGroup"
+  description = "Creating New Security Group for this VPC"
+  vpc_id      = aws_vpc.myVpc.id
+
+  # Allow all inbound traffic (not recommended for production)
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"  
+    cidr_blocks = ["0.0.0.0/0"]  
+  }
+
+  # Allow all outbound traffic
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1" 
+    cidr_blocks = ["0.0.0.0/0"]  
+  }
+
+  tags = {
+    Name = "Eks-sg"
+  }
+}
+
+# Create an IAM Role for the EKS cluster to allow it to manage AWS resources
+resource "aws_iam_role" "eks_role" {
+  name = "eks-cluster-role"
+
+  assume_role_policy = jsonencode({
+    Version: "2012-10-17",
+    Statement: [{
+      Action: "sts:AssumeRole",
+      Effect: "Allow",
+      Principal: { Service: "eks.amazonaws.com" } 
+    }]
+  })
+}
+
+# Attach the AmazonEKSClusterPolicy to the EKS role
+resource "aws_iam_role_policy_attachment" "eks_policy_attachment" {
+  role       = aws_iam_role.eks_role.name
+  policy_arn = data.aws_iam_policy.eks_policy.arn
+}
+
+# Create an IAM Role for the EKS worker nodes
+resource "aws_iam_role" "eks_worker_role" {
+  name = "eks-worker-role"
+
+  assume_role_policy = jsonencode({
+    Version: "2012-10-17",
+    Statement: [{
+      Action: "sts:AssumeRole",
+      Effect: "Allow",
+      Principal: { Service: "ec2.amazonaws.com" } 
+    }]
+  })
+}
+
+# Attach the necessary policies to the worker node role
+resource "aws_iam_role_policy_attachment" "worker_node_policy_attachment" {
+  role       = aws_iam_role.eks_worker_role.name
+  policy_arn = data.aws_iam_policy.eks_worker_node_policy.arn
+}
+
+# Attach the AmazonEC2ContainerRegistryReadOnly policy for ECR access
+resource "aws_iam_role_policy_attachment" "ecr_read_only_policy_attachment" {
+  role       = aws_iam_role.eks_worker_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
