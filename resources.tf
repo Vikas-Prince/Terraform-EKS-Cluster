@@ -171,35 +171,39 @@ resource "aws_iam_role_policy_attachment" "custom_policy_attachment" {
 }
 
 # Create an IAM Role for the EKS worker nodes
-resource "aws_iam_role" "eks_worker_role" {
-  name = "eks-worker-role"
+resource "aws_iam_role" "eks_node_role" {
+  name = "my-eks-node-role"
 
   assume_role_policy = jsonencode({
-    Version: "2012-10-17",
-    Statement: [{
-      Action: "sts:AssumeRole",
-      Effect: "Allow",
-      Principal: { Service: "ec2.amazonaws.com" } 
+    Version = "2012-10-17",
+    Statement = [{
+      Action = "sts:AssumeRole",
+      Effect = "Allow",
+      Principal = { Service = "ec2.amazonaws.com" }
     }]
   })
 }
 
-# Attach the necessary policies to the worker node role
-resource "aws_iam_role_policy_attachment" "worker_node_policy_attachment" {
-  role       = aws_iam_role.eks_worker_role.name
-  policy_arn = data.aws_iam_policy.eks_worker_node_policy.arn
+# Attach necessary policies to EKS Node Role
+resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+  role       = aws_iam_role.eks_node_role.name
 }
 
-# Attach the AmazonEC2ContainerRegistryReadOnly policy for ECR access
-resource "aws_iam_role_policy_attachment" "ecr_read_only_policy_attachment" {
-  role       = aws_iam_role.eks_worker_role.name
+resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+  role       = aws_iam_role.eks_node_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "ecr_read_only_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  role       = aws_iam_role.eks_node_role.name
 }
 
 # Create the EKS Cluster resource
 resource "aws_eks_cluster" "my_cluster" {
   name     = "my-eks-cluster"
-  role_arn = aws_iam_role.eks_role.arn  
+  role_arn = aws_iam_role.eks_cluster_role.arn
 
   vpc_config {
     subnet_ids          = [
@@ -211,7 +215,10 @@ resource "aws_eks_cluster" "my_cluster" {
   }
 
   depends_on = [
-    aws_iam_role_policy_attachment.eks_policy_attachment  
+    aws_iam_policy.custom_eks_policy,
+    aws_iam_role_policy_attachment.eks_service_policy,
+    aws_iam_role_policy_attachment.eks_cluster_policy,
+    aws_iam_role_policy_attachment.eks_vpc_resource_controller
   ]
 }
 
@@ -219,7 +226,7 @@ resource "aws_eks_cluster" "my_cluster" {
 resource "aws_eks_node_group" "my_node_group" {
   cluster_name    = aws_eks_cluster.my_cluster.name
   node_group_name = "my-node-group"
-  node_role_arn   = aws_iam_role.eks_worker_role.arn  
+  node_role_arn   = aws_iam_role.eks_node_role.arn 
   subnet_ids      = [
     aws_subnet.vpcSubnet1.id,
     aws_subnet.vpcSubnet2.id,
@@ -240,7 +247,10 @@ resource "aws_eks_node_group" "my_node_group" {
   }
 
   depends_on = [
-    aws_eks_cluster.my_cluster  
+    aws_eks_cluster.my_cluster,
+    aws_iam_role_policy_attachment.eks_worker_node_policy,
+    aws_iam_role_policy_attachment.eks_cni_policy,
+    aws_iam_role_policy_attachment.ecr_read_only_policy
   ]
 
   tags = {
@@ -253,6 +263,7 @@ resource "aws_launch_template" "eks_launch_template" {
   name_prefix   = "eks-"  
   image_id      = data.aws_ami.latest-ami.id  
   instance_type = var.instance_type 
+  name = "Eks-Worker-Node"
 
   key_name = data.aws_key_pair.eks-key.key_name  
 
