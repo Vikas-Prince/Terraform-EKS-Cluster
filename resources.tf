@@ -114,23 +114,60 @@ resource "aws_security_group" "terraSecuritygp" {
 }
 
 # Create an IAM Role for the EKS cluster to allow it to manage AWS resources
-resource "aws_iam_role" "eks_role" {
-  name = "eks-cluster-role"
+
+# IAM Role for EKS Cluster
+resource "aws_iam_role" "eks_cluster_role" {
+  name = "my-eks-cluster-role"
 
   assume_role_policy = jsonencode({
-    Version: "2012-10-17",
-    Statement: [{
-      Action: "sts:AssumeRole",
-      Effect: "Allow",
-      Principal: { Service: "eks.amazonaws.com" } 
+    Version = "2012-10-17",
+    Statement = [{
+      Action = "sts:AssumeRole",
+      Effect = "Allow",
+      Principal = { Service = "eks.amazonaws.com" }
     }]
   })
 }
 
-# Attach the AmazonEKSClusterPolicy to the EKS role
-resource "aws_iam_role_policy_attachment" "eks_policy_attachment" {
-  role       = aws_iam_role.eks_role.name
-  policy_arn = data.aws_iam_policy.eks_policy.arn
+# Attach necessary policies to EKS Cluster Role
+resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+  role       = aws_iam_role.eks_cluster_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "eks_service_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSServicePolicy"
+  role       = aws_iam_role.eks_cluster_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "eks_vpc_resource_controller" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
+  role       = aws_iam_role.eks_cluster_role.name
+}
+
+
+
+# Create a custom policy
+resource "aws_iam_policy" "custom_eks_policy" {
+  name        = "CustomEKSAccessPolicy"
+  description = "Custom policy to allow EKS actions"
+  policy      = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid    = "VisualEditor0",
+        Effect = "Allow",
+        Action = "eks:*",
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Attach the custom policy to the EKS role
+resource "aws_iam_role_policy_attachment" "custom_policy_attachment" {
+  policy_arn = aws_iam_policy.custom_eks_policy.arn
+  role       = aws_iam_role.eks_cluster_role.name
 }
 
 # Create an IAM Role for the EKS worker nodes
